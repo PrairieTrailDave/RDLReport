@@ -3,13 +3,13 @@
 *       XML Parser - a simple XML parsers
 *
 **********************************************************************************
+*    Copyright 2025 Prairie Trail Software, Inc.
 */
 // Why write another XML parser? 
 // Because many of the other parsers assume that I am parsing an HTML file. 
 // the DOMParser errors off on valid RDL file
 // the <body> tag really confuses it
 
-// this parser does NOT pull off tag contents. This is because an image tag can have a huge content that needs to be handled by the renderer.
 // error handling is done with throwing errors
 
 

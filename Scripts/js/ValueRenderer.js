@@ -3,6 +3,7 @@
 *	V a l u e     R e n d e r e r - a class to render the value
 *
 **********************************************************************************
+*    Copyright 2025 Prairie Trail Software, Inc.
 *
 *    This class handles the value clause of a textrun.
 *    It needs to parse the clause, find the matching data element, and render it
@@ -39,13 +40,48 @@ class ValueRenderer {
         return tokens;
     }
 
-
-    static findFieldValueInJsonData(datasetname, datafieldID, jsonData) {
+    // may want this to return either a dataset or null
+    static findSpecificDataset(datasetname, jsonData) {
+        var tDataset;
         if (jsonData.hostSentData) {
-            var tDataset = jsonData.hostSentData[datasetname];
-            if (tDataset[datafieldID])
-                return tDataset[datafieldID];
-            else return '';
+            try {
+                tDataset = jsonData.hostSentData[datasetname];
+                if (tDataset === undefined) return 'Dataset Missing';
+            }
+            catch { return 'Dataset Missing'; }
+        }
+        return tDataset;
+    }
+
+    // the jsonData will be an array of datasets from the host
+
+    static findFieldValueInJsonData(datasetname, datafieldID, jsonDatasetArray) {
+        if (Array.isArray(jsonDatasetArray)) {
+            for (var datasetID = 0; datasetID < jsonDatasetArray.length; datasetID++) {
+                var specificDataset = jsonDatasetArray[datasetID];
+                if (specificDataset.name == datasetname) {
+                    if (specificDataset.hostSentData) {
+                        try {
+                            var tDataset = specificDataset.hostSentData[datasetname];
+                            if (tDataset === undefined) return 'Dataset Missing';
+                        }
+                        catch { return 'Dataset Missing'; }
+                        try {
+                            if (tDataset[datafieldID])
+                                return tDataset[datafieldID];
+                            else return '';
+                        }
+                        catch { return 'NaN'; }
+                    }
+                }
+            }
+        } else {
+            try {
+                if (tDataset[datafieldID])
+                    return tDataset[datafieldID];
+                else return '';
+            }
+            catch { return 'NaN'; }
         }
         return '';
     }
@@ -86,31 +122,32 @@ class ValueRenderer {
 
 
 
-    static fieldValue(fldname, datasetname, datasets, jsonData) {
+    static fieldValue(fldname, datasetname, datasets, jsonDatasetArray) {
         // look through the datasets to find this dataset
+        if (datasets.children) {
+            for (var i = 0; i < datasets.children.length; i++) {
+                if (datasets.children[i].Name == datasetname) {
+                    var dataset = datasets.children[i];
+                    // look through that dataset children to find the list of fields
+                    for (var j = 0; j < dataset.children.length; j++) {
+                        if (dataset.children[j].nodeType == 'Fields') {
+                            // find that fieldname
+                            var datasetFields = dataset.children[j].children;
+                            if (datasetFields) {
+                                for (var k = 0; k < datasetFields.length; k++) {
+                                    if (datasetFields[k].Name == fldname) {
 
-        for (var i = 0; i < datasets.children.length; i++) {
-            if (datasets.children[i].Name == datasetname) {
-                var dataset = datasets.children[i];
-                // look through that dataset children to find the list of fields
-                for (var j = 0; j < dataset.children.length; j++) {
-                    if (dataset.children[j].nodeType == 'Fields') {
-                        // find that fieldname
-                        var datasetFields = dataset.children[j].children;
-                        if (datasetFields) {
-                            for (var k = 0; k < datasetFields.length; k++) {
-                                if (datasetFields[k].Name == fldname) {
+                                        // a field might have a DataField indicating data from host
+                                        // or a Value indicating a fixed value
+                                        // and a rd:TypeName indicating a data type
 
-                                    // a field might have a DataField indicating data from host
-                                    // or a Value indicating a fixed value
-                                    // and a rd:TypeName indicating a data type
-
-                                    if (datasetFields[k].DataField) {
-                                        var databaseFieldName = datasetFields[k].DataField;
-                                        return this.findFieldValueInJsonData(datasetname, databaseFieldName, jsonData)
-                                    }
-                                    if (datasetFields[k].Value) {
-                                        return datasetFields[k].Value;
+                                        if (datasetFields[k].DataField) {
+                                            var databaseFieldName = datasetFields[k].DataField;
+                                            return this.findFieldValueInJsonData(datasetname, databaseFieldName, jsonDatasetArray)
+                                        }
+                                        if (datasetFields[k].Value) {
+                                            return datasetFields[k].Value;
+                                        }
                                     }
                                 }
                             }
@@ -119,6 +156,7 @@ class ValueRenderer {
                 }
             }
         }
+        return '';
     }
     static extractFieldName(fldname) {
         var pos = fldname.lastIndexOf('.Value');
@@ -129,35 +167,68 @@ class ValueRenderer {
  * parseValue - take the value string and return what needs to be printed
  * @param {any} valueString
  * @param { array of dataset } datasets
- * @param {any} jsonData - the data sent from the host
+ * @param {any} jsonDatasetArray - the data sent from the host
  */
 
 // The value string can have both function calls and definitions of value
 // Functions supported: First
-    static parseValue(valueString, datasets, jsonData) {
+    static parseValue(valueString, datasets, jsonDatasetArray) {
         var flds = [];
         if (valueString) {
-            // split up the value string into fields and operators
-            var ptr = 0;
-            flds = this.splitTokens(valueString);
+            if (valueString.charAt(0) == '=') {
+                // split up the value string into fields and operators
+                var ptr = 0;
+                flds = this.splitTokens(valueString);
 
-            // look through the tokenized array for the Fields! item
+                // look through the tokenized array for the Fields! item
 
-            var i = 0;
-            while (i < flds.length) {
-                if (flds[i] == 'Fields') {
-                    // make sure that we have enough tokens in the stream to find the value
-                    if (flds.length > i + 4) {
-                        var fldName = this.extractFieldName(flds[i + 2]);
-                        if (fldName) {
-                            var datasetname = flds[i + 4];
-                            return this.fieldValue(fldName, datasetname, datasets, jsonData);
+                var i = 0;
+                while (i < flds.length) {
+                    if (flds[i] == 'Fields') {
+                        // make sure that we have enough tokens in the stream to find the value
+                        if (flds.length > i + 4) {
+                            var fldName = this.extractFieldName(flds[i + 2]);
+                            if (fldName) {
+                                var datasetname = flds[i + 4];
+                                return this.fieldValue(fldName, datasetname, datasets, jsonDatasetArray);
+                            }
                         }
                     }
+                    i++;
                 }
-                i++;
             }
+            else return valueString;
         }
         return null;
     }
+    static parseRowValue(valueString, jsonRowDataArray) {
+        var flds = [];
+        if (valueString) {
+            if (valueString.charAt(0) == '=') {
+                // split up the value string into fields and operators
+                var ptr = 0;
+                flds = this.splitTokens(valueString);
+
+                // look through the tokenized array for the Fields! item
+
+                var i = 0;
+                while (i < flds.length) {
+                    if (flds[i] == 'Fields') {
+                        // make sure that we have enough tokens in the stream to find the value
+                        if (flds.length > i + 4) {
+                            var fldName = this.extractFieldName(flds[i + 2]);
+                            if (fldName) {
+                                var datasetname = flds[i + 4];
+                                return this.fieldValue(fldName, datasetname, datasets, jsonRowDataArray);
+                            }
+                        }
+                    }
+                    i++;
+                }
+            }
+            else return valueString;
+        }
+        return null;
+    }
+
 }

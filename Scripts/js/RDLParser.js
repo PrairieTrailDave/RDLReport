@@ -1,6 +1,10 @@
-﻿/**********************************************************************
+﻿/**********************************************************************************
  * 
  *     R D L P a r s e r
+ * 
+ **********************************************************************************
+
+ *    Copyright 2025 Prairie Trail Software, Inc.
  * 
  * The RDLParser goes through the RDL file generating the MetaData tree for the report
  * 
@@ -25,8 +29,8 @@ class RDLItem {
         if (itemChildren) {
             for (var j = 0; j < itemChildren.length; j++) {
                 var childNode = itemChildren[j];
-                // if the child node has children, continue parsing
-                if (childNode.children.length > 0) {
+                // if the child node has children or attributes, continue parsing
+                if ((childNode.children.length > 0) || (childNode.attributes.length > 0)) {
                     rdlItem.children.push(this.parse(xmlString, childNode));
                 } else {  // elevate the value into a parameter on the class
                     if (childNode.contentStart && childNode.contentEnd) {
@@ -82,7 +86,25 @@ class RDLParser {
         return this.xmlString.substring(startPtr, endPtr);
     }
 
+    // this returns an array of the dataset names so that the calling routine
+    // can request those datasets from the host
+    // may need a similar routine that returns the dataset definition tree
 
+    getDatasetNames(_RDLTree) {
+        var datasets = [];
+        for (var i = 0; i < _RDLTree.children.length; i++) {
+            var rdlChild = _RDLTree.children[i];
+            if (rdlChild.nodeType == 'DataSets') {
+                var datasetNode = rdlChild;
+                for (var datasetId = 0; datasetId < datasetNode.children.length; datasetId++) {
+                    var tDataset = datasetNode.children[datasetId];
+                    var datasetName = tDataset.Name;
+                    datasets.push(datasetName);
+                }
+            }
+        }
+        return datasets;
+    }
 
     /** 
      * parse is the main entry point into parsing the RDL file
@@ -92,10 +114,6 @@ class RDLParser {
     parse() {
         var RDLParser = new RDLItem;
         var MetaDataTree = RDLParser.parse(this.xmlString, this.xmlDoc);
-//        MetaDataTree.Body = RDLParser.parse(this.xmlString, this.xmlDoc.getChild("Body"));
-//        MetaDataTree.Page = RDLParser.parse(this.xmlString, this.xmlDoc.getChild("Page"));
-//        MetaDataTree.DataSets = this.parseDataSets();
-//        MetaDataTree.EmbeddedImages = RDLParser.parse(this.xmlString, this.xmlDoc.getChild("EmbeddedImages"));
         return MetaDataTree;
     }
 }
@@ -107,14 +125,3 @@ class RDLParser {
 
 
 
-// function to load a file from the server
-
-async function loadFile(url) {
-  try {
-    const response = await fetch(url);
-    const data = await response.text();
-    console.log(data);
-  } catch (err) {
-    console.error(err);
-  }
-}
